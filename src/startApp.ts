@@ -3,7 +3,7 @@
 
 import { AppStartContext } from '@azure/functions-core';
 import { AzureFunctionsRpcMessages as rpc } from '../azure-functions-language-worker-protobuf/src/rpc';
-import { AzFuncSystemError, ensureErrorType, ReadOnlyError } from './errors';
+import { AzFuncSystemError, ensureErrorType, ReadOnlyError, trySetErrorMessage } from './errors';
 import { executeHooks } from './hooks/executeHooks';
 import { loadScriptFile } from './loadScriptFile';
 import { parsePackageJson } from './parsers/parsePackageJson';
@@ -104,7 +104,7 @@ async function loadEntryPointFile(functionAppDirectory: string): Promise<void> {
             }`;
 
             if (shouldBlockOnEntryPointError()) {
-                error.message = newMessage;
+                trySetErrorMessage(error, newMessage);
                 error.isAzureFunctionsSystemError = true;
                 // We don't want to throw this error now (during workerInit or funcEnvReload) because technically the worker is fine
                 // Instead, it will be thrown during functionMetadata or functionLoad response which better indicates that the user's app is the problem

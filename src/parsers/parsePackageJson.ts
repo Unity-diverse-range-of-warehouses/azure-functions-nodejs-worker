@@ -3,7 +3,7 @@
 
 import { pathExists, readJson } from 'fs-extra';
 import * as path from 'path';
-import { AzFuncSystemError, ensureErrorType } from '../errors';
+import { AzFuncSystemError, ensureErrorType, trySetErrorMessage } from '../errors';
 
 export interface PackageJson {
     type?: string;
@@ -36,7 +36,8 @@ export async function parsePackageJson(dir: string): Promise<PackageJson> {
     } catch (err) {
         const error: Error = ensureErrorType(err);
         if (error.name === 'SyntaxError') {
-            error.message = `file content is not valid JSON: ${error.message}`;
+            const message = `file content is not valid JSON: ${error.message}`;
+            trySetErrorMessage(error, message);
         }
         throw error;
     }
