@@ -2,13 +2,11 @@
 // Licensed under the MIT License.
 
 import 'mocha';
+import * as escapeStringRegexp from 'escape-string-regexp';
+import * as path from 'path';
 import { AzureFunctionsRpcMessages as rpc } from '../../azure-functions-language-worker-protobuf/src/rpc';
 import { testAppPath, testAppSrcPath } from './testAppUtils';
 import { RegExpProps, RegExpStreamingMessage } from './TestEventStream';
-import LogCategory = rpc.RpcLog.RpcLogCategory;
-import LogLevel = rpc.RpcLog.Level;
-import escapeStringRegexp = require('escape-string-regexp');
-import path = require('path');
 
 type TestMessage = rpc.IStreamingMessage | RegExpStreamingMessage;
 
@@ -27,181 +25,222 @@ function workerMetadataRegExps(responseName: string) {
     };
 }
 
-export namespace msg {
-    export function errorLog(message: string | RegExp): TestMessage {
-        return log(message, LogLevel.Error);
-    }
+export function errorLog(message: string | RegExp): TestMessage {
+    return log(message, rpc.RpcLog.Level.Error);
+}
 
-    export function warningLog(message: string | RegExp): TestMessage {
-        return log(message, LogLevel.Warning);
-    }
+export function warningLog(message: string | RegExp): TestMessage {
+    return log(message, rpc.RpcLog.Level.Warning);
+}
 
-    export function debugLog(message: string | RegExp): TestMessage {
-        return log(message, LogLevel.Debug);
-    }
+export function debugLog(message: string | RegExp): TestMessage {
+    return log(message, rpc.RpcLog.Level.Debug);
+}
 
-    export function infoLog(message: string | RegExp): TestMessage {
-        return log(message, LogLevel.Information);
-    }
+export function infoLog(message: string | RegExp): TestMessage {
+    return log(message, rpc.RpcLog.Level.Information);
+}
 
-    export function log(message: string | RegExp, level: LogLevel): TestMessage {
-        if (typeof message === 'string') {
-            return {
-                rpcLog: {
-                    message,
-                    level,
-                    logCategory: LogCategory.System,
-                },
-            };
-        } else {
-            return new RegExpStreamingMessage(
-                {
-                    rpcLog: {
-                        level,
-                        logCategory: LogCategory.System,
-                    },
-                },
-                {
-                    'rpcLog.message': message,
-                }
-            );
-        }
-    }
-
-    export const noHandlerError = msg.errorLog("Worker had no handler for message 'undefined'");
-
-    export const noPackageJsonWarning = msg.warningLog('Worker failed to load package.json: file does not exist');
-
-    export function receivedRequestLog(requestName: string): TestMessage {
-        return debugLog(`Worker 00000000-0000-0000-0000-000000000000 received ${requestName}`);
-    }
-
-    export function loadingEntryPoint(fileName: string): TestMessage {
-        return msg.debugLog(`Loading entry point file "${fileName}"`);
-    }
-
-    export function loadedEntryPoint(fileName: string): TestMessage {
-        return msg.debugLog(`Loaded entry point file "${fileName}"`);
-    }
-
-    export function executingAppHooksLog(count: number, hookName: string): TestMessage {
+export function log(message: string | RegExp, level: rpc.RpcLog.Level): TestMessage {
+    if (typeof message === 'string') {
         return {
             rpcLog: {
-                category: undefined,
-                invocationId: undefined,
-                message: `Executing ${count} "${hookName}" hooks`,
-                level: LogLevel.Debug,
-                logCategory: LogCategory.System,
+                message,
+                level,
+                logCategory: rpc.RpcLog.RpcLogCategory.System,
             },
         };
-    }
-
-    export function executedAppHooksLog(hookName: string): TestMessage {
-        return {
-            rpcLog: {
-                category: undefined,
-                invocationId: undefined,
-                message: `Executed "${hookName}" hooks`,
-                level: LogLevel.Debug,
-                logCategory: LogCategory.System,
-            },
-        };
-    }
-
-    const capabilities = {
-        RawHttpBodyBytes: 'true',
-        RpcHttpBodyOnly: 'true',
-        RpcHttpTriggerMetadataRemoved: 'true',
-        IgnoreEmptyValuedRpcHttpHeaders: 'true',
-        UseNullableValueDictionaryForHttp: 'true',
-        WorkerStatus: 'true',
-        TypedDataCollection: 'true',
-        HandlesWorkerTerminateMessage: 'true',
-    };
-
-    export namespace init {
-        export const receivedRequestLog = msg.receivedRequestLog('WorkerInitRequest');
-
-        export const coldStartWarning = msg.debugLog(
-            'package.json is not found at the root of the Function App in Azure Files - cold start for NodeJs can be affected.'
-        );
-
-        export function request(
-            functionAppDirectory: string = __dirname,
-            hostVersion = '2.7.0'
-        ): rpc.IStreamingMessage {
-            return {
-                requestId: 'testReqId',
-                workerInitRequest: {
-                    capabilities: {},
-                    functionAppDirectory,
-                    hostVersion,
-                },
-            };
-        }
-
-        export const response = new RegExpStreamingMessage(
+    } else {
+        return new RegExpStreamingMessage(
             {
-                requestId: 'testReqId',
-                workerInitResponse: {
-                    capabilities,
-                    result: {
-                        status: rpc.StatusResult.Status.Success,
-                    },
-                    workerMetadata: {
-                        runtimeName: 'node',
-                        customProperties: {
-                            modelName: '@azure/functions',
-                        },
-                    },
+                rpcLog: {
+                    level,
+                    logCategory: rpc.RpcLog.RpcLogCategory.System,
                 },
             },
-            workerMetadataRegExps('workerInitResponse')
+            {
+                'rpcLog.message': message,
+            }
         );
-
-        export function failedResponse(errorMessage: string): RegExpStreamingMessage {
-            const expectedMsg: rpc.IStreamingMessage = {
-                requestId: 'testReqId',
-                workerInitResponse: {
-                    result: {
-                        status: rpc.StatusResult.Status.Failure,
-                        exception: {
-                            message: errorMessage,
-                        },
-                    },
-                    workerMetadata: {
-                        runtimeName: 'node',
-                        customProperties: {
-                            modelName: '@azure/functions',
-                        },
-                    },
-                },
-            };
-            return new RegExpStreamingMessage(expectedMsg, {
-                ...stackTraceRegExpProps('workerInitResponse', errorMessage),
-                ...workerMetadataRegExps('workerInitResponse'),
-            });
-        }
     }
+}
 
-    export namespace envReload {
-        export function reloadEnvVarsLog(numVars: number): TestMessage {
-            return msg.infoLog(`Reloading environment variables. Found ${numVars} variables to reload.`);
-        }
+export const noHandlerError = errorLog("Worker had no handler for message 'undefined'");
 
-        export function changingCwdLog(dir = '/'): TestMessage {
-            return msg.infoLog(`Changing current working directory to ${dir}`);
-        }
+export const noPackageJsonWarning = warningLog('Worker failed to load package.json: file does not exist');
 
-        export const funcAppDirNotDefined = msg.debugLog(
-            'FunctionEnvironmentReload functionAppDirectory is not defined'
+export function receivedRequestLog(requestName: string): TestMessage {
+    return debugLog(`Worker 00000000-0000-0000-0000-000000000000 received ${requestName}`);
+}
+
+export function loadingEntryPoint(fileName: string): TestMessage {
+    return msg.debugLog(`Loading entry point file "${fileName}"`);
+}
+
+export function loadedEntryPoint(fileName: string): TestMessage {
+    return msg.debugLog(`Loaded entry point file "${fileName}"`);
+}
+
+export function executingAppHooksLog(count: number, hookName: string): TestMessage {
+    return {
+        rpcLog: {
+            category: undefined,
+            invocationId: undefined,
+            message: `Executing ${count} "${hookName}" hooks`,
+            level: rpc.RpcLog.Level.Debug,
+            logCategory: rpc.RpcLog.RpcLogCategory.System,
+        },
+    };
+}
+
+export function executedAppHooksLog(hookName: string): TestMessage {
+    return {
+        rpcLog: {
+            category: undefined,
+            invocationId: undefined,
+            message: `Executed "${hookName}" hooks`,
+            level: rpc.RpcLog.Level.Debug,
+            logCategory: rpc.RpcLog.RpcLogCategory.System,
+        },
+    };
+}
+
+const capabilities = {
+    RawHttpBodyBytes: 'true',
+    RpcHttpBodyOnly: 'true',
+    RpcHttpTriggerMetadataRemoved: 'true',
+    IgnoreEmptyValuedRpcHttpHeaders: 'true',
+    UseNullableValueDictionaryForHttp: 'true',
+    WorkerStatus: 'true',
+    TypedDataCollection: 'true',
+    HandlesWorkerTerminateMessage: 'true',
+};
+
+export const coldStartWarning = debugLog(
+    'package.json is not found at the root of the Function App in Azure Files - cold start for NodeJs can be affected.'
+);
+
+export function request(functionAppDirectory: string = __dirname, hostVersion = '2.7.0'): rpc.IStreamingMessage {
+    return {
+        requestId: 'testReqId',
+        workerInitRequest: {
+            capabilities: {},
+            functionAppDirectory,
+            hostVersion,
+        },
+    };
+}
+
+export const response = new RegExpStreamingMessage(
+    {
+        requestId: 'testReqId',
+        workerInitResponse: {
+            capabilities,
+            result: {
+                status: rpc.StatusResult.Status.Success,
+            },
+            workerMetadata: {
+                runtimeName: 'node',
+                customProperties: {
+                    modelName: '@azure/functions',
+                },
+            },
+        },
+    },
+    workerMetadataRegExps('workerInitResponse')
+);
+
+export function failedResponse(errorMessage: string): RegExpStreamingMessage {
+    const expectedMsg: rpc.IStreamingMessage = {
+        requestId: 'testReqId',
+        workerInitResponse: {
+            result: {
+                status: rpc.StatusResult.Status.Failure,
+                exception: {
+                    message: errorMessage,
+                },
+            },
+            workerMetadata: {
+                runtimeName: 'node',
+                customProperties: {
+                    modelName: '@azure/functions',
+                },
+            },
+        },
+    };
+    return new RegExpStreamingMessage(expectedMsg, {
+        ...stackTraceRegExpProps('workerInitResponse', errorMessage),
+        ...workerMetadataRegExps('workerInitResponse'),
+    });
+}
+
+export function reloadEnvVarsLog(numVars: number): TestMessage {
+    return msg.infoLog(`Reloading environment variables. Found ${numVars} variables to reload.`);
+}
+
+export function changingCwdLog(dir = '/'): TestMessage {
+    return msg.infoLog(`Changing current working directory to ${dir}`);
+}
+
+export const funcAppDirNotDefined = debugLog('FunctionEnvironmentReload functionAppDirectory is not defined');
+
+export const funcAppDirNotChanged = debugLog('FunctionEnvironmentReload functionAppDirectory has not changed');
+
+export function logWithInvocation(message: string | RegExp, level: rpc.RpcLog.Level): TestMessage {
+    if (typeof message === 'string') {
+        return {
+            rpcLog: {
+                category: 'testFuncName.Invocation',
+                invocationId: '1',
+                message,
+                level,
+                logCategory: rpc.RpcLog.RpcLogCategory.System,
+            },
+        };
+    } else {
+        return new RegExpStreamingMessage(
+            {
+                rpcLog: {
+                    category: 'testFuncName.Invocation',
+                    invocationId: '1',
+                    level,
+                    logCategory: rpc.RpcLog.RpcLogCategory.System,
+                },
+            },
+            {
+                'rpcLog.message': message,
+            }
         );
+    }
+}
 
-        export const funcAppDirNotChanged = msg.debugLog(
-            'FunctionEnvironmentReload functionAppDirectory has not changed'
-        );
-
-        export const response = new RegExpStreamingMessage(
+export const msg = {
+    errorLog,
+    warningLog,
+    debugLog,
+    infoLog,
+    log,
+    noHandlerError,
+    noPackageJsonWarning,
+    receivedRequestLog,
+    loadingEntryPoint,
+    loadedEntryPoint,
+    executingAppHooksLog,
+    executedAppHooksLog,
+    capabilities,
+    init: {
+        receivedRequestLog: receivedRequestLog('WorkerInitRequest'),
+        coldStartWarning,
+        request,
+        response,
+        failedResponse,
+    },
+    envReload: {
+        reloadEnvVarsLog,
+        changingCwdLog,
+        funcAppDirNotDefined,
+        funcAppDirNotChanged,
+        response: new RegExpStreamingMessage(
             {
                 requestId: 'testReqId',
                 functionEnvironmentReloadResponse: {
@@ -220,23 +259,19 @@ export namespace msg {
                 },
             },
             workerMetadataRegExps('functionEnvironmentReloadResponse')
-        );
-    }
-
-    export namespace indexing {
-        export const request = {
+        ),
+    },
+    indexing: {
+        request: {
             requestId: 'testReqId',
             functionsMetadataRequest: {
                 functionAppDirectory: testAppPath,
             },
-        };
+        },
 
-        export const receivedRequestLog = msg.receivedRequestLog('FunctionsMetadataRequest');
+        receivedRequestLog: receivedRequestLog('FunctionsMetadataRequest'),
 
-        export function response(
-            functions: rpc.IRpcFunctionMetadata[],
-            useDefaultMetadataIndexing: boolean
-        ): TestMessage {
+        response(functions: rpc.IRpcFunctionMetadata[], useDefaultMetadataIndexing: boolean): TestMessage {
             const response: rpc.IStreamingMessage = {
                 requestId: 'testReqId',
                 functionMetadataResponse: {
@@ -250,12 +285,9 @@ export namespace msg {
                 response.functionMetadataResponse!.functionMetadataResults = functions;
             }
             return response;
-        }
+        },
 
-        export function failedResponse(
-            errorMessage: string,
-            useDefaultMetadataIndexing: boolean
-        ): RegExpStreamingMessage {
+        failedResponse(errorMessage: string, useDefaultMetadataIndexing: boolean): RegExpStreamingMessage {
             const expectedMsg: rpc.IStreamingMessage = {
                 requestId: 'testReqId',
                 functionMetadataResponse: {
@@ -271,13 +303,12 @@ export namespace msg {
             return new RegExpStreamingMessage(expectedMsg, {
                 ...stackTraceRegExpProps('functionMetadataResponse', errorMessage),
             });
-        }
-    }
+        },
+    },
+    funcLoad: {
+        receivedRequestLog: receivedRequestLog('FunctionLoadRequest'),
 
-    export namespace funcLoad {
-        export const receivedRequestLog = msg.receivedRequestLog('FunctionLoadRequest');
-
-        export function request(fileName: string, extraMetadata?: rpc.IRpcFunctionMetadata): rpc.IStreamingMessage {
+        request(fileName: string, extraMetadata?: rpc.IRpcFunctionMetadata): rpc.IStreamingMessage {
             return {
                 requestId: 'testReqId',
                 functionLoadRequest: {
@@ -289,9 +320,9 @@ export namespace msg {
                     },
                 },
             };
-        }
+        },
 
-        export const response = {
+        response: {
             requestId: 'testReqId',
             functionLoadResponse: {
                 functionId: 'testFuncId',
@@ -299,9 +330,9 @@ export namespace msg {
                     status: rpc.StatusResult.Status.Success,
                 },
             },
-        };
+        },
 
-        export function failedResponse(message: string): TestMessage {
+        failedResponse(message: string): TestMessage {
             return new RegExpStreamingMessage(
                 {
                     requestId: 'testReqId',
@@ -317,27 +348,22 @@ export namespace msg {
                 },
                 stackTraceRegExpProps('functionLoadResponse', message)
             );
-        }
-    }
-
-    export namespace invocation {
-        export function errorLog(message: string | RegExp): TestMessage {
-            return log(message, LogLevel.Error);
-        }
-
-        export function warningLog(message: string | RegExp): TestMessage {
-            return log(message, LogLevel.Warning);
-        }
-
-        export function debugLog(message: string | RegExp): TestMessage {
-            return log(message, LogLevel.Debug);
-        }
-
-        export function infoLog(message: string | RegExp): TestMessage {
-            return log(message, LogLevel.Information);
-        }
-
-        export function log(message: string | RegExp, level: LogLevel): TestMessage {
+        },
+    },
+    invocation: {
+        errorLog(message: string | RegExp): TestMessage {
+            return logWithInvocation(message, rpc.RpcLog.Level.Error);
+        },
+        warningLog(message: string | RegExp): TestMessage {
+            return logWithInvocation(message, rpc.RpcLog.Level.Warning);
+        },
+        debugLog(message: string | RegExp): TestMessage {
+            return logWithInvocation(message, rpc.RpcLog.Level.Debug);
+        },
+        infoLog(message: string | RegExp): TestMessage {
+            return logWithInvocation(message, rpc.RpcLog.Level.Information);
+        },
+        log(message: string | RegExp, level: rpc.RpcLog.Level): TestMessage {
             if (typeof message === 'string') {
                 return {
                     rpcLog: {
@@ -345,7 +371,7 @@ export namespace msg {
                         invocationId: '1',
                         message,
                         level,
-                        logCategory: LogCategory.System,
+                        logCategory: rpc.RpcLog.RpcLogCategory.System,
                     },
                 };
             } else {
@@ -355,7 +381,7 @@ export namespace msg {
                             category: 'testFuncName.Invocation',
                             invocationId: '1',
                             level,
-                            logCategory: LogCategory.System,
+                            logCategory: rpc.RpcLog.RpcLogCategory.System,
                         },
                     },
                     {
@@ -363,45 +389,41 @@ export namespace msg {
                     }
                 );
             }
-        }
-
-        export const receivedRequestLog = msg.invocation.debugLog(
-            'Worker 00000000-0000-0000-0000-000000000000 received FunctionInvocationRequest with invocationId 1'
-        );
-
-        export function executingHooksLog(count: number, hookName: string): TestMessage {
+        },
+        receivedRequestLog: logWithInvocation(
+            'Worker 00000000-0000-0000-0000-000000000000 received FunctionInvocationRequest with invocationId 1',
+            rpc.RpcLog.Level.Debug
+        ),
+        executingHooksLog(count: number, hookName: string): TestMessage {
             return msg.invocation.debugLog(`Executing ${count} "${hookName}" hooks`);
-        }
-
-        export function executedHooksLog(hookName: string): TestMessage {
+        },
+        executedHooksLog(hookName: string): TestMessage {
             return msg.invocation.debugLog(`Executed "${hookName}" hooks`);
-        }
-
-        export const asyncAndDoneError = msg.invocation.errorLog(
-            "Error: Choose either to return a promise or call 'done'. Do not use both in your script. Learn more: https://go.microsoft.com/fwlink/?linkid=2097909"
-        );
-
-        export const duplicateDoneError = msg.invocation.errorLog(
-            "Error: 'done' has already been called. Please check your script for extraneous calls to 'done'."
-        );
-
-        export const unexpectedLogAfterDoneLog = msg.invocation.warningLog(
-            "Warning: Unexpected call to 'log' on the context object after function execution has completed. Please check for asynchronous calls that are not awaited or calls to 'done' made before function execution completes. Function name: testFuncName. Invocation Id: 1. Learn more: https://go.microsoft.com/fwlink/?linkid=2097909"
-        );
-
-        export function userLog(data = 'testUserLog', level = LogLevel.Information): TestMessage {
+        },
+        asyncAndDoneError: logWithInvocation(
+            "Error: Choose either to return a promise or call 'done'. Do not use both in your script. Learn more: https://go.microsoft.com/fwlink/?linkid=2097909",
+            rpc.RpcLog.Level.Error
+        ),
+        duplicateDoneError: logWithInvocation(
+            "Error: 'done' has already been called. Please check your script for extraneous calls to 'done'.",
+            rpc.RpcLog.Level.Error
+        ),
+        unexpectedLogAfterDoneLog: logWithInvocation(
+            "Warning: Unexpected call to 'log' on the context object after function execution has completed. Please check for asynchronous calls that are not awaited or calls to 'done' made before function execution completes. Function name: testFuncName. Invocation Id: 1. Learn more: https://go.microsoft.com/fwlink/?linkid=2097909",
+            rpc.RpcLog.Level.Warning
+        ),
+        userLog(data = 'testUserLog', level = rpc.RpcLog.Level.Information): TestMessage {
             return {
                 rpcLog: {
                     category: 'testFuncName.Invocation',
                     invocationId: '1',
                     message: data,
                     level,
-                    logCategory: LogCategory.User,
+                    logCategory: rpc.RpcLog.RpcLogCategory.User,
                 },
             };
-        }
-
-        export function request(inputData?: rpc.IParameterBinding[] | null): rpc.IStreamingMessage {
+        },
+        request(inputData?: rpc.IParameterBinding[] | null): rpc.IStreamingMessage {
             return {
                 requestId: 'testReqId',
                 invocationRequest: {
@@ -410,12 +432,8 @@ export namespace msg {
                     inputData: inputData,
                 },
             };
-        }
-
-        export function response(
-            expectedOutputData?: rpc.IParameterBinding[] | null,
-            expectedReturnValue?: rpc.ITypedData | null
-        ) {
+        },
+        response(expectedOutputData?: rpc.IParameterBinding[] | null, expectedReturnValue?: rpc.ITypedData | null) {
             const msg: TestMessage = {};
             msg.requestId = 'testReqId';
             msg.invocationResponse = {
@@ -429,9 +447,8 @@ export namespace msg {
                 msg.invocationResponse.returnValue = expectedReturnValue;
             }
             return msg;
-        }
-
-        export function failedResponse(message = 'testErrorMessage'): TestMessage {
+        },
+        failedResponse(message = 'testErrorMessage'): TestMessage {
             return new RegExpStreamingMessage(
                 {
                     requestId: 'testReqId',
@@ -447,11 +464,10 @@ export namespace msg {
                 },
                 stackTraceRegExpProps('invocationResponse', message)
             );
-        }
-    }
-
-    export namespace terminate {
-        export function request(gracePeriodSeconds = 5): rpc.IStreamingMessage {
+        },
+    },
+    terminate: {
+        request(gracePeriodSeconds = 5): rpc.IStreamingMessage {
             return {
                 workerTerminate: {
                     gracePeriod: {
@@ -459,10 +475,7 @@ export namespace msg {
                     },
                 },
             };
-        }
-
-        export const receivedWorkerTerminateLog = msg.debugLog(
-            'Received workerTerminate message; gracefully shutting down worker'
-        );
-    }
-}
+        },
+        receivedWorkerTerminateLog: debugLog('Received workerTerminate message; gracefully shutting down worker'),
+    },
+};
